@@ -33,6 +33,7 @@ type ComputerClub struct {
 	CloseTime    time.Time          // Время закрытия
 	Tables       map[int]*Table     // Столы и кто их занял
 	Clients      map[string]*Client // Список клиентов
+	FreeTables   int                // Количество свободных столов
 }
 
 // Client структура клиента
@@ -66,6 +67,7 @@ func NewComputerClub(totalTables, price int, start, end time.Time) *ComputerClub
 		Tables:       make(map[int]*Table),
 		ClientsQueue: make([]*Client, 0),
 		Clients:      make(map[string]*Client),
+		FreeTables:   totalTables,
 	}
 }
 
@@ -139,10 +141,12 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 
 				continue
 			}
-			fmt.Printf("%v %d %s\n",
-				eventTime.Format("15:04"),
-				CLIENT_ERROR,
-				I_CAN_WAIT_NO_LONGER)
+			if cc.FreeTables > 0 {
+				fmt.Printf("%v %d %s\n",
+					eventTime.Format("15:04"),
+					CLIENT_ERROR,
+					I_CAN_WAIT_NO_LONGER)
+			}
 
 		case CLIENT_LEFT:
 			// Если клиент не находится в клубе
@@ -190,7 +194,16 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 
 			// Просто освобождаем место у стола
 			clientToLeave := cc.Clients[clientName]
+			// Прибавляем доход
+			cc.Tables[clientToLeave.Table].Income +=
+				cc.addIncome(eventTime, clientToLeave)
+			// Прибавляем время, проведенное клиентом за столом
+			cc.Tables[clientToLeave.Table].TotalTime =
+				cc.addTime(eventTime, cc.Tables[clientToLeave.Table].TotalTime, clientToLeave)
+			// Убираем клиента из стола
 			cc.Tables[clientToLeave.Table].Client = nil
+
+			cc.FreeTables++ // Освободился стол
 
 			delete(cc.Clients, clientName)
 
@@ -204,13 +217,15 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 					cc.Tables[tableIdx] = NewTable(tableIdx)
 				}
 
-				currClient.StartPlay = eventTime            // Ставим вреся начала игры
-				cc.Tables[tableIdx].Client = currClient     // Посадили клиента за стол
+				currClient.StartPlay = eventTime            // Ставим время начала игры
 				currClient.Table = tableIdx                 // Сохраняем у клиента стол
+				cc.Tables[tableIdx].Client = currClient     // Посадили клиента за стол
 				clientIdx := cc.findClientIndex(clientName) // Ищем позицию клиента в очереди
 
 				cc.ClientsQueue = append(cc.ClientsQueue[:clientIdx],
 					cc.ClientsQueue[clientIdx+1:]...) // Обновляем очередь
+
+				cc.FreeTables-- // Стол занят
 
 				continue
 			}
@@ -226,8 +241,15 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 	}
 
 	// Создадим слайс для оставшихся (после закрытия клуба) клиентов
+	// и посчитаем доходы с них и время за столом
 	remainingClients := make([]string, 0, len(cc.Clients))
 	for _, c := range cc.Clients {
+		cc.Tables[c.Table].Income +=
+			cc.addIncome(cc.CloseTime, c)
+
+		cc.Tables[c.Table].TotalTime =
+			cc.addTime(cc.CloseTime, cc.Tables[c.Table].TotalTime, c)
+
 		remainingClients = append(remainingClients, c.Name)
 	}
 
@@ -249,7 +271,6 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 	for _, t := range cc.Tables {
 		fmt.Printf("%d %d %v\n", t.Index, t.Income, t.TotalTime.Format("15:04"))
 	}
-
 }
 
 // findClientIndex находит позицию клиента в очереди
