@@ -80,7 +80,7 @@ func NewTable(idx int) *Table {
 
 // StartWork начинает работу клуба
 func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
-	fmt.Println(cc.OpenTime)
+	fmt.Println(cc.OpenTime.Format("15:04"))
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -94,7 +94,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 		// Человек пришел раньше времени открытия
 		if eventTime.Before(cc.OpenTime) {
 			fmt.Printf("%v %d %s\n",
-				eventTime,
+				eventTime.Format("15:04"),
 				CLIENT_ERROR,
 				NOT_OPEN_YET)
 
@@ -107,7 +107,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 			// Человек уже в клубе
 			if _, ok := cc.Clients[clientName]; ok {
 				fmt.Printf("%v %d %s\n",
-					eventTime,
+					eventTime.Format("15:04"),
 					CLIENT_ERROR,
 					YOU_SHALL_NOT_PASS)
 				continue
@@ -124,7 +124,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 			// поэтому я решил просто убирать человека из очереди ожидания, если такой ивент случился
 			if len(cc.ClientsQueue) > cc.TablesCount {
 				fmt.Printf("%v %d %s\n",
-					eventTime,
+					eventTime.Format("15:04"),
 					CLIENT_LEFT_OUTGOING,
 					clientName)
 
@@ -140,7 +140,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 				continue
 			}
 			fmt.Printf("%v %d %s\n",
-				eventTime,
+				eventTime.Format("15:04"),
 				CLIENT_ERROR,
 				I_CAN_WAIT_NO_LONGER)
 
@@ -148,7 +148,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 			// Если клиент не находится в клубе
 			if _, ok := cc.Clients[clientName]; !ok {
 				fmt.Printf("%v %d %s\n",
-					eventTime,
+					eventTime.Format("15:04"),
 					CLIENT_ERROR,
 					CLIENT_UNKNOWN)
 				continue
@@ -157,33 +157,30 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 			// Освобождаем место и приглашаем следующего
 			if len(cc.ClientsQueue) > 0 {
 				nextClient := cc.ClientsQueue[0] // Берем клиента из очереди
+				nextClient.StartPlay = eventTime // Ставим у следующего клиента начало время игры
 
 				cc.ClientsQueue = cc.ClientsQueue[1:] // Обновляем очередь
 
 				clientToLeave := cc.Clients[clientName] // Получаем клиента
 
-				cc.Tables[clientToLeave.Table].Income += // Прибавляем доход у стола
-					cc.Price * (int(math.Ceil(eventTime. // Округляем в большую сторону
-										Sub(clientToLeave.StartPlay). // Вычитаем время ивента - начала игры
-										Abs().
-										Hours())))
+				cc.Tables[clientToLeave.Table].Income += // Прибавляем доход
+					cc.addIncome(eventTime, clientToLeave)
 
 				// Получаем накопленное время стола
 				totalTime := cc.Tables[clientToLeave.Table].TotalTime
 
 				// Прибавляем к накопленному времени стола время, проведенное клиентом за столом
-				cc.Tables[clientToLeave.Table].TotalTime = totalTime.
-					Add(eventTime.
-						Sub(clientToLeave.StartPlay))
-
-				delete(cc.Clients, clientName) // Удаляем старого клиента
+				cc.Tables[clientToLeave.Table].TotalTime =
+					cc.addTime(eventTime, totalTime, clientToLeave)
 
 				table := cc.Clients[clientName].Table // Получаем освободившейся стол
 				nextClient.Table = table              // Сохраняем у клиента стол
 				cc.Tables[table].Client = nextClient  // Клиент сел за стол
 
+				delete(cc.Clients, clientName) // Удаляем старого клиента
+
 				fmt.Printf("%v %d %s %d\n",
-					eventTime,
+					eventTime.Format("15:04"),
 					CLIENT_SAT_TABLE_OUTGOING,
 					nextClient.Name,
 					table)
@@ -194,6 +191,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 			// Просто освобождаем место у стола
 			clientToLeave := cc.Clients[clientName]
 			cc.Tables[clientToLeave.Table].Client = nil
+
 			delete(cc.Clients, clientName)
 
 		case CLIENT_SAT_TABLE:
@@ -205,36 +203,51 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 				if !ok {
 					cc.Tables[tableIdx] = NewTable(tableIdx)
 				}
-				cc.Tables[tableIdx].Client = currClient //Посадили клиента за стол
-				currClient.Table = tableIdx             // Сохраняем у клиента стол
+
+				currClient.StartPlay = eventTime            // Ставим вреся начала игры
+				cc.Tables[tableIdx].Client = currClient     // Посадили клиента за стол
+				currClient.Table = tableIdx                 // Сохраняем у клиента стол
+				clientIdx := cc.findClientIndex(clientName) // Ищем позицию клиента в очереди
+
+				cc.ClientsQueue = append(cc.ClientsQueue[:clientIdx],
+					cc.ClientsQueue[clientIdx+1:]...) // Обновляем очередь
+
 				continue
 			}
 
 			// Если стол занят
 			if t, ok := cc.Tables[tableIdx]; ok && t.Client != nil {
 				fmt.Printf("%v %d %s\n",
-					eventTime,
+					eventTime.Format("15:04"),
 					CLIENT_ERROR,
 					PLACE_IS_BUSY)
 			}
 		}
 	}
 
+	// Создадим слайс для оставшихся (после закрытия клуба) клиентов
 	remainingClients := make([]string, 0, len(cc.Clients))
 	for _, c := range cc.Clients {
 		remainingClients = append(remainingClients, c.Name)
 	}
 
+	// Сортируем по имени клиентов
 	slices.Sort(remainingClients)
 
+	// Выводи оставшихся клиентов
 	for _, name := range remainingClients {
-		fmt.Printf("%v %d %s\n", cc.CloseTime, CLIENT_LEFT_OUTGOING, name)
+		fmt.Printf("%v %d %s\n",
+			cc.CloseTime.Format("15:04"),
+			CLIENT_LEFT_OUTGOING,
+			name)
 	}
 
-	fmt.Println(cc.CloseTime)
+	// Время закрытия клуба
+	fmt.Println(cc.CloseTime.Format("15:04"))
 
+	// Выводим номер стола, заработок, общее время за столом
 	for _, t := range cc.Tables {
-		fmt.Printf("%d %d %v\n", t.Index, t.Income, t.TotalTime)
+		fmt.Printf("%d %d %v\n", t.Index, t.Income, t.TotalTime.Format("15:04"))
 	}
 
 }
@@ -247,4 +260,21 @@ func (cc *ComputerClub) findClientIndex(clientName string) int {
 		}
 	}
 	return -1
+}
+
+func (cc *ComputerClub) addTime(eventTime, totalTime time.Time,
+	clientToLeave *Client) time.Time {
+	t := totalTime.
+		Add(eventTime.
+			Sub(clientToLeave.StartPlay))
+	return t
+}
+
+func (cc *ComputerClub) addIncome(eventTime time.Time,
+	clientToLeave *Client) int {
+	income := cc.Price * (int(math.Ceil(eventTime. // Округляем в большую сторону
+							Sub(clientToLeave.StartPlay). // Вычитаем время ивента - начала игры
+							Abs().
+							Hours())))
+	return income
 }

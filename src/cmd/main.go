@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
+	"io"
 	"log"
 	"os"
 
@@ -17,6 +18,8 @@ func main() {
 	if isValid := internal.ValidateFile(file); !isValid {
 		return
 	}
+
+	file.Seek(0, io.SeekStart)
 
 	scanner := bufio.NewScanner(file)
 

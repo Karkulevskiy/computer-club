@@ -36,6 +36,7 @@ func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string)
 	var start, end time.Time
 	var err error
 	for i := 0; i < 3; i++ {
+		scanner.Scan()
 		line := scanner.Text()
 		switch i {
 		case 0:
@@ -60,6 +61,7 @@ func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string)
 			}
 		}
 	}
+
 	return tablesCount, price, start, end, ""
 }
 
