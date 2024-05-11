@@ -42,11 +42,13 @@ func ValidateFile(file *os.File) bool {
 
 			prevTime = nextTime
 			flag = true
+			continue
 		}
 
-		// Если у следующие событие оказалось раньше предыдущего,
+		// Если следующие событие оказалось раньше предыдущего
+		// или его время совпадает с предыдущем,
 		// или стол оказыватся > N || <= 0
-		if !isValid || nextTime.Before(prevTime) ||
+		if !isValid || (nextTime.Before(prevTime) || nextTime.Equal(prevTime)) ||
 			tableID > totalTables {
 
 			fmt.Println(invalidStr)

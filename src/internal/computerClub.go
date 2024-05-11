@@ -224,6 +224,15 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 			delete(cc.Clients, clientName)
 
 		case CLIENT_SAT_TABLE:
+			// Если такого клиента нет в клубе
+			if _, ok := cc.Clients[clientName]; !ok {
+				fmt.Printf("%v %d %s\n",
+					eventTime.Format("15:04"),
+					CLIENT_ERROR,
+					CLIENT_UNKNOWN)
+				continue
+			}
+
 			currClient := cc.Clients[clientName]
 
 			// Если стол пустой
@@ -255,12 +264,14 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 	// и посчитаем доходы с них и время за столом
 	remainingClients := make([]string, 0, len(cc.Clients))
 	for _, c := range cc.Clients {
-		cc.Tables[c.Table].Income +=
-			cc.addIncome(cc.CloseTime, c)
+		// Если клиент был за столом
+		if c.Table != 0 {
+			cc.Tables[c.Table].Income +=
+				cc.addIncome(cc.CloseTime, c)
 
-		cc.Tables[c.Table].TotalTime =
-			cc.addTime(cc.CloseTime, cc.Tables[c.Table].TotalTime, c)
-
+			cc.Tables[c.Table].TotalTime =
+				cc.addTime(cc.CloseTime, cc.Tables[c.Table].TotalTime, c)
+		}
 		remainingClients = append(remainingClients, c.Name)
 	}
 
