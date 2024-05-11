@@ -64,11 +64,21 @@ func NewComputerClub(totalTables, price int, start, end time.Time) *ComputerClub
 		Price:        price,
 		OpenTime:     start,
 		CloseTime:    end,
-		Tables:       make(map[int]*Table),
+		Tables:       NewTables(totalTables),
 		ClientsQueue: make([]*Client, 0),
 		Clients:      make(map[string]*Client),
 		FreeTables:   totalTables,
 	}
+}
+
+// NewTables создает map со столами
+func NewTables(totalTable int) map[int]*Table {
+	tables := map[int]*Table{}
+	for i := 1; i <= totalTable; i++ {
+		tables[i] = NewTable(i)
+	}
+
+	return tables
 }
 
 // NewTable создает новый стол
@@ -104,7 +114,7 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 		}
 
 		switch eventID {
-		// Человек уже есть в клубе, но событие, что человек пришел
+		// Человек пришел в клуб
 		case CLIENT_ARRIVED:
 			// Человек уже в клубе
 			if _, ok := cc.Clients[clientName]; ok {
@@ -115,15 +125,19 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 				continue
 			}
 
+			// Создаем нового клиента
 			newClient := NewClient(clientName)
+
 			// Добавляем человека в очередь ожидания и в список посетителей
 			cc.ClientsQueue = append(cc.ClientsQueue, newClient)
-
 			cc.Clients[clientName] = newClient
 
+			// Событие, что клиент ждет
 		case CLIENT_WAIT:
 			// В ТЗ не написано, нужно ли смотреть на позицию человека в очереди
 			// поэтому я решил просто убирать человека из очереди ожидания, если такой ивент случился
+
+			// Если очередь больше, чем столов, то человек покидает клуб
 			if len(cc.ClientsQueue) > cc.TablesCount {
 				fmt.Printf("%v %d %s\n",
 					eventTime.Format("15:04"),
@@ -141,6 +155,8 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 
 				continue
 			}
+
+			// Если есть свободные столы, то клиент не может ждать
 			if cc.FreeTables > 0 {
 				fmt.Printf("%v %d %s\n",
 					eventTime.Format("15:04"),
@@ -210,13 +226,8 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 		case CLIENT_SAT_TABLE:
 			currClient := cc.Clients[clientName]
 
-			// Если за этот стол никто не садился или он пустой
-			if t, ok := cc.Tables[tableIdx]; !ok || t.Client == nil {
-				// Если мы еще не создавали этот стол
-				if !ok {
-					cc.Tables[tableIdx] = NewTable(tableIdx)
-				}
-
+			// Если стол пустой
+			if t, ok := cc.Tables[tableIdx]; ok && t.Client == nil {
 				currClient.StartPlay = eventTime            // Ставим время начала игры
 				currClient.Table = tableIdx                 // Сохраняем у клиента стол
 				cc.Tables[tableIdx].Client = currClient     // Посадили клиента за стол

@@ -9,42 +9,78 @@ import (
 	"time"
 )
 
+// Доступные символы для имени клиента
 const (
 	validChars = "qwertyuiopasdfghjklzxcvbnm1234567890_"
 )
 
+// ValidateFile проверяет валидность файла
 func ValidateFile(file *os.File) bool {
 	scanner := bufio.NewScanner(file)
 
-	if _, _, _, _, invalidStr := GetOptions(scanner); invalidStr != "" {
+	var prevTime time.Time
+
+	var flag bool
+
+	// Получаем параметры для клуба и проверяем им корректность
+	totalTables, _, _, _, invalidStr := GetOptions(scanner)
+	if invalidStr != "" {
 		fmt.Println(invalidStr)
 		return false
 	}
 
+	// Проверяем следующие строки в файле на корректность
 	for scanner.Scan() {
-		if _, _, _, _, invalidStr := GetAction(scanner.Text()); invalidStr != "" {
+		nextTime, _, _, tableID, invalidStr := GetAction(scanner.Text())
+
+		// Если это первое событие, то запоминаем время
+		if !flag {
+			if invalidStr != "" {
+				fmt.Println(invalidStr)
+				return false
+			}
+
+			prevTime = nextTime
+			flag = true
+		}
+
+		// Если у следующие событие оказалось раньше предыдущего,
+		// или стол оказыватся > N || <= 0
+		if invalidStr != "" || nextTime.Before(prevTime) ||
+			tableID > totalTables {
+
 			fmt.Println(invalidStr)
 			return false
 		}
+
+		prevTime = nextTime
 	}
 
 	return true
 }
 
+// GetOptions получает параметры для клуба
+// Проверяем первые 3 параметра
 func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string) {
 	var tablesCount, price int
 	var start, end time.Time
 	var err error
+	var line string
 	for i := 0; i < 3; i++ {
-		scanner.Scan()
-		line := scanner.Text()
+		// Если было задано меньше 3 параметров, то вернем последнуюю считанную строку
+		if !scanner.Scan() {
+			return 0, 0, time.Time{}, time.Time{}, line
+		}
+		line = scanner.Text()
 		switch i {
 		case 0:
+			// Проверяем количество столов в клубе
 			tablesCount, err = strconv.Atoi(line)
 			if err != nil || tablesCount <= 0 {
 				return 0, 0, time.Time{}, time.Time{}, line
 			}
 		case 1:
+			// Проверяем начало и конец рабочего времени
 			workDuration := strings.Split(line, " ")
 			start, err = time.Parse("15:04", workDuration[0])
 			if err != nil {
@@ -55,6 +91,7 @@ func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string)
 				return 0, 0, time.Time{}, time.Time{}, line
 			}
 		case 2:
+			// Проверяем цену
 			price, err = strconv.Atoi(line)
 			if err != nil || price <= 0 {
 				return 0, 0, time.Time{}, time.Time{}, line
@@ -93,7 +130,7 @@ func GetAction(line string) (time.Time, int, string, int, string) {
 	}
 
 	tableID, err := strconv.Atoi(data[3])
-	if err != nil {
+	if err != nil || tableID <= 0 {
 		return time.Time{}, 0, "", 0, line
 	}
 
