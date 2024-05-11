@@ -31,11 +31,11 @@ func ValidateFile(file *os.File) bool {
 
 	// Проверяем следующие строки в файле на корректность
 	for scanner.Scan() {
-		nextTime, _, _, tableID, invalidStr := GetAction(scanner.Text())
+		nextTime, _, _, tableID, invalidStr, isValid := GetAction(scanner.Text())
 
 		// Если это первое событие, то запоминаем время
 		if !flag {
-			if invalidStr != "" {
+			if !isValid {
 				fmt.Println(invalidStr)
 				return false
 			}
@@ -46,7 +46,7 @@ func ValidateFile(file *os.File) bool {
 
 		// Если у следующие событие оказалось раньше предыдущего,
 		// или стол оказыватся > N || <= 0
-		if invalidStr != "" || nextTime.Before(prevTime) ||
+		if !isValid || nextTime.Before(prevTime) ||
 			tableID > totalTables {
 
 			fmt.Println(invalidStr)
@@ -56,7 +56,8 @@ func ValidateFile(file *os.File) bool {
 		prevTime = nextTime
 	}
 
-	return true
+	// Если файл пустой, то вернется false
+	return flag
 }
 
 // GetOptions получает параметры для клуба
@@ -67,7 +68,7 @@ func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string)
 	var err error
 	var line string
 	for i := 0; i < 3; i++ {
-		// Если было задано меньше 3 параметров, то вернем последнуюю считанную строку
+		// Если было задано меньше 3 параметров, то вернем последнюю считанную строку
 		if !scanner.Scan() {
 			return 0, 0, time.Time{}, time.Time{}, line
 		}
@@ -83,7 +84,7 @@ func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string)
 			// Проверяем начало и конец рабочего времени
 			workDuration := strings.Split(line, " ")
 			start, err = time.Parse("15:04", workDuration[0])
-			if err != nil {
+			if err != nil || len(workDuration) != 2 {
 				return 0, 0, time.Time{}, time.Time{}, line
 			}
 			end, err = time.Parse("15:04", workDuration[1])
@@ -102,39 +103,39 @@ func GetOptions(scanner *bufio.Scanner) (int, int, time.Time, time.Time, string)
 	return tablesCount, price, start, end, ""
 }
 
-func GetAction(line string) (time.Time, int, string, int, string) {
+func GetAction(line string) (time.Time, int, string, int, string, bool) {
 	data := strings.Split(line, " ")
 
 	if len(data) < 3 {
-		return time.Time{}, 0, "", 0, line
+		return time.Time{}, 0, "", 0, line, false
 	}
 
 	eventTime, err := time.Parse("15:04", data[0])
 	if err != nil {
-		return time.Time{}, 0, "", 0, line
+		return time.Time{}, 0, "", 0, line, false
 	}
 
 	eventID, err := strconv.Atoi(data[1])
 	if err != nil {
-		return time.Time{}, 0, "", 0, line
+		return time.Time{}, 0, "", 0, line, false
 	}
 
 	if !clientIsValid(data[2]) {
-		return time.Time{}, 0, "", 0, line
+		return time.Time{}, 0, "", 0, line, false
 	}
 
 	client := data[2]
 
 	if len(data) == 3 {
-		return eventTime, int(eventID), client, 0, ""
+		return eventTime, int(eventID), client, 0, line, true
 	}
 
 	tableID, err := strconv.Atoi(data[3])
 	if err != nil || tableID <= 0 {
-		return time.Time{}, 0, "", 0, line
+		return time.Time{}, 0, "", 0, line, false
 	}
 
-	return eventTime, int(eventID), client, tableID, ""
+	return eventTime, int(eventID), client, tableID, line, true
 }
 
 func clientIsValid(client string) bool {

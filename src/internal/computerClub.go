@@ -98,13 +98,13 @@ func (cc *ComputerClub) StartWork(scanner *bufio.Scanner) {
 		line := scanner.Text()
 
 		// Считываем по строчно файлик, чтобы не было переполнения
-		eventTime, eventID, clientName, tableIdx, _ := GetAction(line)
+		eventTime, eventID, clientName, tableIdx, _, _ := GetAction(line)
 
 		// Выводим входящее событие
 		fmt.Println(line)
 
-		// Человек пришел раньше времени открытия
-		if eventTime.Before(cc.OpenTime) {
+		// Человек пришел раньше времени открытия или позже закрытия
+		if eventTime.Before(cc.OpenTime) || eventTime.After(cc.CloseTime) {
 			fmt.Printf("%v %d %s\n",
 				eventTime.Format("15:04"),
 				CLIENT_ERROR,
